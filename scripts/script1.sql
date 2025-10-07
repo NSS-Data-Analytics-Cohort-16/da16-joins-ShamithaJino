@@ -10,19 +10,14 @@ SELECT film_title, release_year, worldwide_gross AS min_gross
 FROM specs AS s
 INNER JOIN revenue AS r
 ON s.movie_id=r.movie_id
-ORDER BY min_gross;
-
-SELECT film_title, release_year, worldwide_gross AS min_gross
-FROM specs AS s
-LEFT JOIN revenue AS r
-ON s.movie_id=r.movie_id
 ORDER BY min_gross
 LIMIT 1;
+
 
 -- 2.	What year has the highest average imdb rating?
 
 SELECT release_year, imdb_rating
-FROM specs as s
+FROM specs AS s
 INNER JOIN rating AS r
 ON s.movie_id=r.movie_id
 ORDER BY imdb_rating DESC
@@ -53,14 +48,14 @@ ORDER BY no_of_movies DESC;
 
 -- 5.	Write a query that returns the five distributors with the highest average movie budget.
 
-SELECT company_name, AVG(film_budget) AS high_avg_budget
+SELECT company_name, AVG(film_budget) AS highest_avg_budget
 FROM distributors AS d
 INNER JOIN specs AS s
 ON d.distributor_id=s.domestic_distributor_id
 INNER JOIN revenue AS r
 ON r.movie_id=s.movie_id
 GROUP BY company_name
-ORDER BY high_avg_budget DESC
+ORDER BY highest_avg_budget DESC
 LIMIT 5;
 
 -- 6.	How many movies in the dataset are distributed by a company which is not headquartered in California?
@@ -87,16 +82,12 @@ SELECT
 FROM specs AS s
 INNER JOIN rating AS r
 ON s.movie_id=r.movie_id
-GROUP BY movie_length
+GROUP BY movie_length;
+
 
 -- ## Joins Exercise Bonus Questions
 
 -- 1.	Find the total worldwide gross and average imdb rating by decade. 
-
-select * from distributors
-select * from rating
-select * from revenue
-select * from specs
 
 SELECT release_year/10 *10 AS decade, SUM(worldwide_gross), ROUND(AVG(imdb_rating),2) AS avg_rating
 FROM specs AS s
@@ -122,26 +113,144 @@ LIMIT 1 OFFSET 1;
 -- 2.	Our goal in this question is to compare the worldwide gross for movies compared to their sequels.   
 -- 	a.	Start by finding all movies whose titles end with a space and then the number 2. 
 
+SELECT film_title FROM specs
+WHERE film_title LIKE '% 2'
 
--- 	b.	For each of these movies, create a new column showing the original film’s name by removing the last two characters of the film title. For example, for the film “Cars 2”, the original title would be “Cars”. Hint: You may find the string functions listed in Table 9-10 of https://www.postgresql.org/docs/current/functions-string.html to be helpful for this. 
--- 	c.	Bonus: This method will not work for movies like “Harry Potter and the Deathly Hallows: Part 2”, where the original title should be “Harry Potter and the Deathly Hallows: Part 1”. Modify your query to fix these issues.  
--- 	d.	Now, build off of the query you wrote for the previous part to pull in worldwide revenue for both the original movie and its sequel. Do sequels tend to make more in revenue? Hint: You will likely need to perform a self-join on the specs table in order to get the movie_id values for both the original films and their sequels. Bonus: A common data entry problem is trailing whitespace. In this dataset, it shows up in the film_title field, where the movie “Deadpool” is recorded as “Deadpool “. One way to fix this problem is to use the TRIM function. Incorporate this into your query to ensure that you are matching as many sequels as possible.
+-- 	b.	For each of these movies, create a new column showing the original film’s name by removing the last two characters of the film title.
+--For example, for the film “Cars 2”, the original title would be “Cars”.
+--Hint: You may find the string functions listed in Table 9-10 of https://www.postgresql.org/docs/current/functions-string.html to be helpful for this. 
+
+SELECT film_title, 
+	CASE 
+		WHEN film_title LIKE '% 2' THEN LEFT(film_title, LENGTH(film_title) - 2)
+		ELSE film_title
+	END AS cleaned_name
+FROM specs
+
+-- 	c.	Bonus: This method will not work for movies like “Harry Potter and the Deathly Hallows: Part 2”, 
+--where the original title should be “Harry Potter and the Deathly Hallows: Part 1”. 
+--Modify your query to fix these issues. 
+
+SELECT film_title, 
+	CASE 
+		WHEN film_title ~* 'Part 2' THEN REGEXP_REPLACE(film_title,'Part 2$','part 1')
+		ELSE film_title
+	END AS new_film_column
+FROM specs
+
+-- 	d.	Now, build off of the query you wrote for the previous part to pull in worldwide revenue for both the original movie and its sequel. 
+--Do sequels tend to make more in revenue? Hint: You will likely need to perform a self-join on the specs table in order to get the movie_id values for both the original films and their sequels.
+--Bonus: A common data entry problem is trailing whitespace. In this dataset, it shows up in the film_title field, where the movie “Deadpool” is recorded as “Deadpool “.
+--One way to fix this problem is to use the TRIM function. Incorporate this into your query to ensure that you are matching as many sequels as possible.
+
+
+select s.film_title, r.worldwide_gross from specs as s
+inner join revenue as r
+on r.movie_id = s.movie_id
+where film_title='The Amazing Spider-Man'
+
+SELECT  seq.film_title, orig.film_title,r.worldwide_gross AS seq_gross, re.worldwide_gross AS Orig_gross
+FROM specs AS seq
+JOIN specs AS orig
+ON orig.film_title =CASE 
+					WHEN seq.film_title LIKE 'Part 2' THEN REGEXP_REPLACE(seq.film_title,'Part 2$','part 1')
+					WHEN seq.film_title LIKE '% 2' THEN LEFT(seq.film_title, LENGTH(seq.film_title) - 2)
+					END
+INNER JOIN revenue AS r
+ON seq.movie_id=r.movie_id
+INNER JOIN revenue AS re
+ON orig.movie_id=re.movie_id
+
 
 -- 3.	Sometimes movie series can be found by looking for titles that contain a colon. For example, Transformers: Dark of the Moon is part of the Transformers series of films.  
--- 	a.	Write a query which, for each film will extract the portion of the film name that occurs before the colon. For example, “Transformers: Dark of the Moon” should result in “Transformers”.  If the film title does not contain a colon, it should return the full film name. For example, “Transformers” should result in “Transformers”. Your query should return two columns, the film_title and the extracted value in a column named series. Hint: You may find the split_part function useful for this task.
--- 	b.	Keep only rows which actually belong to a series. Your results should not include “Shark Tale” but should include both “Transformers” and “Transformers: Dark of the Moon”. Hint: to accomplish this task, you could use a WHERE clause which checks whether the film title either contains a colon or is in the list of series values for films that do contain a colon.  
--- 	c.	Which film series contains the most installments?  
+-- 	a.	Write a query which, for each film will extract the portion of the film name that occurs before the colon
+-- For example, “Transformers: Dark of the Moon” should result in “Transformers”.If the film title does not contain a colon, 
+--it should return the full film name. For example, “Transformers” should result in “Transformers”. 
+--Your query should return two columns, the film_title and the extracted value in a column named series. 
+--Hint: You may find the split_part function useful for this task.
+
+
+SELECT SPLIT_PART(film_title, ':', 1) AS series, film_title
+FROM specs
+
+-- 	b.	Keep only rows which actually belong to a series. 
+--Your results should not include “Shark Tale” but should include both “Transformers” and “Transformers: Dark of the Moon”. 
+--Hint: to accomplish this task, you could use a WHERE clause which checks whether 
+--the film title either contains a colon or is in the list of series values for films that do contain a colon.  
+
+SELECT 
+	film_title 
+FROM specs
+WHERE film_title LIKE '%:%'
+OR film_title IN
+(
+				SELECT SPLIT_PART(film_title, ':', 1) AS series
+				FROM specs
+				WHERE film_title LIKE '%:%'
+)
+
+
+-- 	c.	Which film series contains the most installments? 
+
+SELECT 
+	SPLIT_PART(film_title, ':', 1) AS series, COUNT(*) AS total_installments
+FROM specs
+GROUP BY series
+ORDER BY total_installments DESC
+
 -- 	d.	Which film series has the highest average imdb rating? Which has the lowest average imdb rating?
 
--- 4.	How many film titles contain the word “the” either upper or lowercase? How many contain it twice? three times? four times? Hint: Look at the sting functions and operators here: https://www.postgresql.org/docs/current/functions-string.html 
 
--- 5.	For each distributor, find its highest rated movie. Report the company name, the film title, and the imdb rating. Hint: you may find the LATERAL keyword useful for this question. This keyword allows you to join two or more tables together and to reference columns provided by preceding FROM items in later items. See this article for examples of lateral joins in postgres: https://www.cybertec-postgresql.com/en/understanding-lateral-joins-in-postgresql/ 
+SELECT film_series, avg_rating 
+FROM (
+SELECT SPLIT_PART(s.film_title, ':', 1) AS film_series , 
+		AVG(r.imdb_rating) AS avg_rating,
+		RANK() OVER (ORDER BY AVG(r.imdb_rating) DESC) AS high_avg_rating,
+		RANK() OVER (ORDER BY AVG(r.imdb_rating) ASC) AS low_avg_rating
+FROM rating AS r
+LEFT JOIN specs AS s
+ON s.movie_id=r.movie_id
+GROUP BY film_series
+)
+WHERE high_avg_rating=1 OR low_avg_rating=1
 
--- 6.	Follow-up: Another way to answer 5 is to use DISTINCT ON so that your query returns only one row per company. You can read about DISTINCT ON on this page: https://www.postgresql.org/docs/current/sql-select.html. 
 
--- 7.	Which distributors had movies in the dataset that were released in consecutive years? For example, Orion Pictures released Dances with Wolves in 1990 and The Silence of the Lambs in 1991. Hint: Join the specs table to itself and think carefully about what you want to join ON. 
+-- 4.	How many film titles contain the word “the” either upper or lowercase? How many contain it twice? three times? four times? 
+--Hint: Look at the sting functions and operators here: https://www.postgresql.org/docs/current/functions-string.html 
 
+-- 5.	For each distributor, find its highest rated movie. Report the company name, the film title, and the imdb rating. 
+--Hint: you may find the LATERAL keyword useful for this question. 
+--This keyword allows you to join two or more tables together and to reference columns provided by preceding FROM items in later items. 
+--See this article for examples of lateral joins in postgres: https://www.cybertec-postgresql.com/en/understanding-lateral-joins-in-postgresql/ 
 
+SELECT d.company_name, 
+		l.film_title,
+		l.imdb_rating
+FROM distributors AS d
+LEFT JOIN LATERAL (
+	SELECT 
+			s.film_title,
+			r.imdb_rating
+	FROM specs AS s
+	LEFT JOIN rating AS r
+	on s.movie_id=r.movie_id
+	WHERE s.domestic_distributor_id=d.distributor_id
+ 	ORDER BY r.imdb_rating DESC
+	 LIMIT 1
+	) AS l ON TRUE
+WHERE l.imdb_rating IS NOT NULL
+ORDER BY l.imdb_rating DESC
+-- 6.	Follow-up: Another way to answer 5 is to use DISTINCT ON so that your query returns only one row per company.
+--You can read about DISTINCT ON on this page: https://www.postgresql.org/docs/current/sql-select.html. 
+
+-- 7.	Which distributors had movies in the dataset that were released in consecutive years? 
+--For example, Orion Pictures released Dances with Wolves in 1990 and The Silence of the Lambs in 1991. 
+--Hint: Join the specs table to itself and think carefully about what you want to join ON. 
+
+select * from distributors
+select * from rating
+select * from revenue
+select * from specs
 
 
 
